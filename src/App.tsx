@@ -176,13 +176,15 @@ function ScandalDB() {
   const [scandals, setScandals] = useState<Scandal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCollecting, setIsCollecting] = useState(false);
+  const isCollectingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   // Gemini Setup
   const ai = useMemo(() => new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' }), []);
 
   const collectScandals = async () => {
-    if (isCollecting) return;
+    if (isCollectingRef.current) return;
+    isCollectingRef.current = true;
     setIsCollecting(true);
     setError(null);
     try {
@@ -191,24 +193,24 @@ function ScandalDB() {
       
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: `本日（${currentDate}）時点での、日本の行政機関、地方自治体、または公務員による最新の不祥事ニュース（汚職、横領、ハラスメント、情報漏洩、不適切な公務執行など）を、重複なく、必ず正確に10件リストアップしてください。
+        contents: `本日（${currentDate}）時点での、日本の行政機関、地方自治体、または公務員による最新の不祥事ニュース（汚職、横領、ハラスメント、情報漏洩、不適切な公務執行など）を、重複なく、必ず正確に15件リストアップしてください。
 各項目には以下の情報を含めてください：
-- title: ニュースのタイトル
+- title: ニュースのタイトル（具体的かつ正確に）
 - date: 発生または報道された日付（YYYY/MM/DD形式）
 - category: "Administrative"（組織的・行政的）または "Personal"（個人的な非行）
-- description: 100文字以上の詳細な概要
-- sourceUrl: ニュースソースのURL（実在するもの）
+- description: 150文字以上の詳細な概要（背景、内容、現在の状況を含む）
+- sourceUrl: ニュースソースのURL（実在する信頼できるニュースサイトのURL）
 - location: 発生した都道府県や市区町村
 
 必ず有効なJSON配列形式で出力してください。`,
         config: {
-          systemInstruction: "あなたは日本の行政・公務員不祥事を記録する専門のアーキビストです。Google検索ツールを使用して、最新かつ正確な報道情報を収集してください。客観的な事実に基づき、感情的な表現を避けて記録してください。必ず指定されたJSONフォーマットを守り、10件のデータを生成してください。",
+          systemInstruction: "あなたは日本の行政・公務員不祥事を記録する専門のシニア・アーキビストです。Google検索ツールを使用して、本日時点での最新かつ正確な報道情報を収集してください。客観的な事実に基づき、感情的な表現を避けて記録してください。必ず指定されたJSONフォーマットを守り、15件のデータを生成してください。重複を避け、実在するニュースのみを扱ってください。",
           tools: [{ googleSearch: {} }],
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.ARRAY,
-            minItems: 10,
-            maxItems: 10,
+            minItems: 15,
+            maxItems: 15,
             items: {
               type: Type.OBJECT,
               properties: {
@@ -230,6 +232,7 @@ function ScandalDB() {
       const collectedScandals = JSON.parse(response.text);
       const scandalsCollection = collection(db, "scandals");
 
+      let addedCount = 0;
       // Store in Firestore
       for (const scandal of collectedScandals) {
         const q = query(scandalsCollection, where("title", "==", scandal.title));
@@ -240,28 +243,36 @@ function ScandalDB() {
             ...scandal,
             createdAt: Timestamp.now()
           });
+          addedCount++;
         }
       }
+      console.log(`Successfully added ${addedCount} new scandals to Firestore.`);
     } catch (err) {
       console.error("Failed to collect scandals:", err);
-      // Fallback to mock data if AI fails
+      
+      // Fallback to mock data if AI fails, but check for duplicates even here
+      const scandalsCollection = collection(db, "scandals");
       const fallbackScandals = Array.from({ length: 10 }).map((_, i) => ({
-        title: `[AI収集エラー] システムによる代替表示 第${i + 1}号`,
+        title: `[AI収集制限中] システムによる代替表示 第${Date.now()}-${i + 1}号`,
         date: new Date().toLocaleDateString('ja-JP'),
         category: i % 2 === 0 ? "Administrative" : "Personal",
-        description: "現在、AIによるリアルタイムニュース収集が一時的に制限されています。このデータはシステムによる代替表示です。本来なされるべきであった適正な公務執行が欠如した事例として記録されています。",
+        description: "現在、AIによるリアルタイムニュース収集が一時的に制限されているか、最新のニュースが見つかりませんでした。このデータはシステムによる整合性維持のための代替表示です。行政の透明性と公務員の倫理観を再考するための記録として保持されます。",
         sourceUrl: "https://www.google.com/search?q=公務員+不祥事+ニュース",
         location: "全国",
         createdAt: Timestamp.now()
       }));
 
-      const scandalsCollection = collection(db, "scandals");
       for (const scandal of fallbackScandals) {
-        await addDoc(scandalsCollection, scandal);
+        const q = query(scandalsCollection, where("title", "==", scandal.title));
+        const existing = await getDocs(q);
+        if (existing.empty) {
+          await addDoc(scandalsCollection, scandal);
+        }
       }
       
-      setError('AIによるニュース収集に失敗しました。システムによる代替データを生成しました。');
+      setError('AIによるニュース収集に不安定な挙動が見られました。システムによる代替データを生成しました。');
     } finally {
+      isCollectingRef.current = false;
       setIsCollecting(false);
     }
   };
@@ -276,7 +287,8 @@ function ScandalDB() {
       setIsLoading(false);
       
       // Auto-collect if empty or fewer than 10
-      if (data.length < 10 && !isCollecting) {
+      if (data.length < 10 && !isCollectingRef.current) {
+        console.log(`Current data count (${data.length}) is less than 10. Triggering AI collection...`);
         collectScandals();
       }
     }, (err) => {
