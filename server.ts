@@ -33,33 +33,47 @@ async function startServer() {
     try {
       console.log("AI is collecting latest scandals...");
       
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: "日本の行政機関や公務員による最新の不祥事ニュースを、重複なく、必ず正確に10件リストアップしてください。各項目にはタイトル、日付（YYYY/MM/DD形式）、カテゴリ[Administrative/Personal]、詳細な概要（100文字以上）、ソースURL、発生場所を含めてください。JSON形式で出力してください。",
-        config: {
-          tools: [{ googleSearch: {} }],
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            minItems: 10,
-            maxItems: 10,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                title: { type: Type.STRING },
-                date: { type: Type.STRING },
-                category: { type: Type.STRING },
-                description: { type: Type.STRING },
-                sourceUrl: { type: Type.STRING },
-                location: { type: Type.STRING }
-              },
-              required: ["title", "date", "category", "description", "sourceUrl"]
+      let scandals = [];
+      try {
+        const response = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: "日本の行政機関や公務員による最新の不祥事ニュースを、重複なく、必ず正確に10件リストアップしてください。各項目にはタイトル、日付（YYYY/MM/DD形式）、カテゴリ[Administrative/Personal]、詳細な概要（100文字以上）、ソースURL、発生場所を含めてください。JSON形式で出力してください。",
+          config: {
+            tools: [{ googleSearch: {} }],
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.ARRAY,
+              minItems: 10,
+              maxItems: 10,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  date: { type: Type.STRING },
+                  category: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  sourceUrl: { type: Type.STRING },
+                  location: { type: Type.STRING }
+                },
+                required: ["title", "date", "category", "description", "sourceUrl"]
+              }
             }
           }
-        }
-      });
+        });
+        scandals = JSON.parse(response.text);
+      } catch (aiError) {
+        console.error("AI Collection failed, using fallback:", aiError);
+        // Fallback mock data if AI fails
+        scandals = Array.from({ length: 10 }).map((_, i) => ({
+          title: `[Fallback] 行政不祥事事案 第${i + 1}号`,
+          date: new Date().toLocaleDateString('ja-JP'),
+          category: i % 2 === 0 ? "Administrative" : "Personal",
+          description: "AIによるリアルタイム収集が一時的に制限されています。このデータはシステムによる代替表示です。本来なされるべきであった適正な公務執行が欠如した事例として記録されています。",
+          sourceUrl: "https://www.google.com/search?q=公務員+不祥事+ニュース",
+          location: "全国"
+        }));
+      }
 
-      const scandals = JSON.parse(response.text);
       const scandalsCollection = collection(db, "scandals");
 
       // Store in Firestore

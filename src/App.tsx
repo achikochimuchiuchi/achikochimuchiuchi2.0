@@ -4,9 +4,13 @@
  */
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, Filter, Plus, ChevronRight, Clock, Database, X, Info, Activity, Layers, Share2 } from 'lucide-react';
+import { Search, Filter, Plus, ChevronRight, Clock, Database, X, Info, Activity, Layers, Share2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { GoogleGenAI, Type } from "@google/genai";
+import { collection, addDoc, query, orderBy, limit, getDocs, Timestamp, where, onSnapshot } from "firebase/firestore";
+import { db } from "./firebase";
 
+// --- Types ---
 interface ArchiveItem {
   id: string;
   title: string;
@@ -170,65 +174,136 @@ function NewEntryModal({ isOpen, onClose, onSubmit }: { isOpen: boolean, onClose
 
 function ScandalDB() {
   const [scandals, setScandals] = useState<Scandal[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isCollecting, setIsCollecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchScandals = async (autoCollect = false) => {
-    setIsLoading(true);
-    try {
-      const res = await fetch('/api/scandals');
-      const data = await res.json();
-      setScandals(data);
-      
-      // If fewer than 10 and autoCollect is true, trigger collection to top up
-      if (data.length < 10 && autoCollect) {
-        await collectScandals();
-      }
-    } catch (err) {
-      console.error("Failed to fetch scandals:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Gemini Setup
+  const ai = useMemo(() => new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' }), []);
 
   const collectScandals = async () => {
+    if (isCollecting) return;
     setIsCollecting(true);
+    setError(null);
     try {
-      await fetch('/api/collect-scandals', { method: 'POST' });
-      await fetchScandals(false);
+      console.log("AI is collecting latest scandals from frontend...");
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: "日本の行政機関や公務員による最新の不祥事ニュースを、重複なく、必ず正確に10件リストアップしてください。各項目にはタイトル、日付（YYYY/MM/DD形式）、カテゴリ[Administrative/Personal]、詳細な概要（100文字以上）、ソースURL、発生場所を含めてください。JSON形式で出力してください。",
+        config: {
+          tools: [{ googleSearch: {} }],
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            minItems: 10,
+            maxItems: 10,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                title: { type: Type.STRING },
+                date: { type: Type.STRING },
+                category: { type: Type.STRING },
+                description: { type: Type.STRING },
+                sourceUrl: { type: Type.STRING },
+                location: { type: Type.STRING }
+              },
+              required: ["title", "date", "category", "description", "sourceUrl"]
+            }
+          }
+        }
+      });
+
+      const collectedScandals = JSON.parse(response.text);
+      const scandalsCollection = collection(db, "scandals");
+
+      // Store in Firestore
+      for (const scandal of collectedScandals) {
+        const q = query(scandalsCollection, where("title", "==", scandal.title));
+        const existing = await getDocs(q);
+        
+        if (existing.empty) {
+          await addDoc(scandalsCollection, {
+            ...scandal,
+            createdAt: Timestamp.now()
+          });
+        }
+      }
     } catch (err) {
       console.error("Failed to collect scandals:", err);
+      setError('AIによるニュース収集に失敗しました。しばらく時間をおいてから再度お試しください。');
     } finally {
       setIsCollecting(false);
     }
   };
 
   useEffect(() => {
-    fetchScandals(true);
+    const scandalsCollection = collection(db, "scandals");
+    const q = query(scandalsCollection, orderBy("createdAt", "desc"), limit(10));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Scandal));
+      setScandals(data);
+      setIsLoading(false);
+      
+      // Auto-collect if empty or fewer than 10
+      if (data.length < 10 && !isCollecting) {
+        collectScandals();
+      }
+    }, (err) => {
+      console.error("Firestore Error:", err);
+      setError('データベースの読み込みに失敗しました。');
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   return (
     <div className="space-y-12">
-      <div className="flex justify-between items-center mb-12">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
         <div>
           <h3 className="text-3xl font-serif mb-2 tracking-tight">不祥事データベース</h3>
           <p className="text-xs text-white/40 tracking-[0.2em] uppercase font-bold">AIによる行政・公務員不祥事の自動収集システム</p>
         </div>
-        <button 
-          onClick={collectScandals}
-          disabled={isCollecting}
-          className={`flex items-center gap-3 px-8 py-4 rounded-2xl text-[10px] font-bold uppercase tracking-widest transition-all border ${
-            isCollecting 
-            ? 'bg-white/5 border-white/10 opacity-50 cursor-not-allowed' 
-            : 'bg-[#FF4E00] hover:bg-[#FF6321] border-[#FF4E00] shadow-lg shadow-[#FF4E00]/20'
-          }`}
-        >
-          <Activity size={16} className={isCollecting ? 'animate-spin' : ''} />
-          {isCollecting ? 'AI収集実行中...' : '最新ニュースをAI収集'}
-        </button>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-xl">
+            <div className={`w-2 h-2 rounded-full ${isCollecting ? 'bg-yellow-500 animate-pulse' : 'bg-green-500'}`} />
+            <span className="text-[10px] font-mono opacity-60 uppercase tracking-widest">
+              {isCollecting ? 'AI COLLECTING' : 'SYSTEM READY'}
+            </span>
+          </div>
+          <button 
+            onClick={collectScandals}
+            disabled={isCollecting}
+            className={`flex items-center gap-3 px-8 py-4 rounded-2xl text-[10px] font-bold uppercase tracking-widest transition-all border ${
+              isCollecting 
+              ? 'bg-white/5 border-white/10 opacity-50 cursor-not-allowed' 
+              : 'bg-[#FF4E00] hover:bg-[#FF6321] border-[#FF4E00] shadow-lg shadow-[#FF4E00]/20'
+            }`}
+          >
+            <Activity size={16} className={isCollecting ? 'animate-spin' : ''} />
+            {isCollecting ? 'AI収集実行中...' : '最新ニュースをAI収集'}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6">
+        {error && (
+          <div className="p-8 rounded-[32px] bg-red-500/10 border border-red-500/20 text-red-400 mb-6 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <AlertCircle size={18} />
+              <span className="text-sm font-bold">{error}</span>
+            </div>
+            <button 
+              onClick={() => collectScandals()}
+              className="px-6 py-2 bg-red-500/20 hover:bg-red-500/30 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all"
+            >
+              再試行
+            </button>
+          </div>
+        )}
+
         {(isLoading || (isCollecting && scandals.length === 0)) ? (
           // Skeleton Loaders
           Array.from({ length: 10 }).map((_, i) => (
@@ -251,48 +326,57 @@ function ScandalDB() {
               </div>
             )}
             {scandals.map((scandal, index) => (
-            <motion.div
-              key={scandal.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.05 }}
-              className="group p-8 rounded-[32px] bg-white/[0.02] border border-white/5 hover:border-[#FF4E00]/30 transition-all"
-            >
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center gap-3">
-                  <span className={`px-3 py-1 rounded-full text-[8px] font-bold uppercase tracking-widest ${
-                    scandal.category === 'Administrative' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'
-                  }`}>
-                    {scandal.category}
-                  </span>
-                  <span className="text-[10px] font-mono opacity-40">{scandal.date}</span>
-                  {scandal.location && (
-                    <span className="text-[10px] font-mono opacity-40 flex items-center gap-1">
-                      <Info size={10} /> {scandal.location}
+              <motion.div
+                key={scandal.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className="group p-8 rounded-[32px] bg-white/[0.02] border border-white/5 hover:border-[#FF4E00]/30 transition-all"
+              >
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex items-center gap-3">
+                    <span className={`px-3 py-1 rounded-full text-[8px] font-bold uppercase tracking-widest ${
+                      scandal.category === 'Administrative' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'
+                    }`}>
+                      {scandal.category}
                     </span>
-                  )}
+                    <span className="text-[10px] font-mono opacity-40">{scandal.date}</span>
+                    {scandal.location && (
+                      <span className="text-[10px] font-mono opacity-40 flex items-center gap-1">
+                        <Info size={10} /> {scandal.location}
+                      </span>
+                    )}
+                  </div>
+                  <a 
+                    href={scandal.sourceUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 hover:text-[#FF4E00] transition-all flex items-center gap-2"
+                  >
+                    <Share2 size={12} /> Source
+                  </a>
                 </div>
-                <a 
-                  href={scandal.sourceUrl} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 hover:text-[#FF4E00] transition-all flex items-center gap-2"
-                >
-                  <Share2 size={12} /> Source
-                </a>
-              </div>
-              <h4 className="text-2xl font-serif mb-4 group-hover:text-[#FF4E00] transition-colors">{scandal.title}</h4>
-              <p className="text-sm text-white/50 leading-relaxed font-light mb-6">{scandal.description}</p>
-              <div className="flex items-center gap-2 text-[8px] font-mono opacity-20 uppercase tracking-widest">
-                <Clock size={10} /> Collected at: {new Date(scandal.createdAt?.seconds * 1000).toLocaleString()}
-              </div>
-            </motion.div>
-          ))}
+                <h4 className="text-2xl font-serif mb-4 group-hover:text-[#FF4E00] transition-colors">{scandal.title}</h4>
+                <p className="text-sm text-white/50 leading-relaxed font-light mb-6">{scandal.description}</p>
+                <div className="flex items-center gap-2 text-[8px] font-mono opacity-20 uppercase tracking-widest">
+                  <Clock size={10} /> Collected at: {new Date(scandal.createdAt?.seconds * 1000).toLocaleString()}
+                </div>
+              </motion.div>
+            ))}
           </>
         ) : (
-          <div className="py-24 text-center border border-dashed border-white/10 rounded-[32px] opacity-40">
-            <Database size={32} className="mx-auto mb-4" />
-            <p className="text-sm uppercase tracking-widest font-bold">Database is empty. Run AI Collection to populate.</p>
+          <div className="py-24 text-center border border-dashed border-white/10 rounded-[32px] bg-white/[0.01] group">
+            <Database size={48} className="mx-auto mb-6 text-white/20 group-hover:text-[#FF4E00] transition-colors" />
+            <h4 className="text-xl font-serif mb-4">データベースが空です</h4>
+            <p className="text-sm text-white/40 mb-8 max-w-md mx-auto">
+              現在、表示できる不祥事データがありません。AIによる自動収集を開始して、最新の10件を掲載してください。
+            </p>
+            <button 
+              onClick={collectScandals}
+              className="px-10 py-4 bg-[#FF4E00] hover:bg-[#FF6321] text-white font-bold uppercase tracking-[0.2em] text-xs rounded-2xl transition-all shadow-lg shadow-[#FF4E00]/20"
+            >
+              AI収集を開始する
+            </button>
           </div>
         )}
       </div>
