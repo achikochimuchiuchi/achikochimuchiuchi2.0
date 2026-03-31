@@ -3,150 +3,242 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
-import { Copy, Check, Info, ExternalLink } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Search, Filter, Plus, ChevronRight, Clock, Database } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+
+interface ArchiveItem {
+  id: string;
+  title: string;
+  date: string;
+  category: string;
+  description: string;
+  intensity: number;
+}
+
+const MOCK_DATA: ArchiveItem[] = [
+  {
+    id: "ARC-001",
+    title: "沈黙の選択",
+    date: "2026.03.15",
+    category: "Communication",
+    description: "伝えるべき言葉を飲み込んだ瞬間。その空白がもたらした静寂の記録。",
+    intensity: 0.8
+  },
+  {
+    id: "ARC-002",
+    title: "未踏の分岐点",
+    date: "2026.03.20",
+    category: "Decision",
+    description: "選ばれなかった道。歩まれなかった歩数。存在しない足跡の可視化。",
+    intensity: 0.6
+  },
+  {
+    id: "ARC-003",
+    title: "保留された意志",
+    date: "2026.03.28",
+    category: "Action",
+    description: "「明日」へと先送りされた決意。蓄積される時間の重力。",
+    intensity: 0.9
+  }
+];
 
 export default function App() {
   const [isMounted, setIsMounted] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const folderName = "不作為可視化アーカイブ";
+  const [selectedItem, setSelectedItem] = useState<ArchiveItem | null>(null);
+  const [activeTab, setActiveTab] = useState<'archive' | 'visualize'>('archive');
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(folderName);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy: ', err);
-    }
-  };
-
-  if (!isMounted) {
-    return null;
-  }
+  if (!isMounted) return null;
 
   return (
-    <div className="min-h-screen bg-[#f5f5f0] text-[#1a1a1a] font-sans selection:bg-[#5A5A40] selection:text-white">
-      {/* Header */}
-      <header className="border-b border-black/10 py-6 px-4 md:px-8 bg-white/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-3xl mx-auto flex justify-between items-center">
-          <h1 className="text-sm uppercase tracking-widest font-semibold opacity-60">
-            Guide / Archive
-          </h1>
-          <div className="flex items-center gap-4 text-xs font-medium opacity-40">
-            <span>VER. 1.0.0</span>
+    <div className="min-h-screen bg-[#0a0a0a] text-[#e0e0e0] font-sans selection:bg-[#FF4E00] selection:text-white overflow-x-hidden">
+      {/* Background Atmosphere */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#FF4E00]/5 blur-[120px] rounded-full" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-[#3a1510]/10 blur-[150px] rounded-full" />
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03]" />
+      </div>
+
+      {/* Navigation */}
+      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 bg-black/40 backdrop-blur-xl">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-8">
+            <h1 className="text-lg font-serif tracking-[0.2em] font-light uppercase">
+              Inaction <span className="text-[#FF4E00]">Archive</span>
+            </h1>
+            <div className="hidden md:flex items-center gap-6 text-[10px] tracking-widest font-bold uppercase opacity-40">
+              <button 
+                onClick={() => setActiveTab('archive')}
+                className={`hover:opacity-100 transition-opacity ${activeTab === 'archive' ? 'opacity-100 text-[#FF4E00]' : ''}`}
+              >
+                Archive
+              </button>
+              <button 
+                onClick={() => setActiveTab('visualize')}
+                className={`hover:opacity-100 transition-opacity ${activeTab === 'visualize' ? 'opacity-100 text-[#FF4E00]' : ''}`}
+              >
+                Visualize
+              </button>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <button className="p-2 hover:bg-white/5 rounded-full transition-colors opacity-60">
+              <Search size={18} />
+            </button>
+            <button className="bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-full transition-all border border-white/10">
+              New Entry
+            </button>
           </div>
         </div>
-      </header>
+      </nav>
 
-      <main className="max-w-3xl mx-auto px-4 py-12 md:py-24">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-        >
-          <section className="mb-16">
-            <h2 className="text-4xl md:text-6xl font-serif font-light leading-tight mb-8">
-              不作為可視化アーカイブ<br />
-              <span className="italic text-2xl md:text-3xl opacity-40">Inaction Visualization Archive</span>
+      <main className="relative z-10 pt-32 pb-24 px-6 max-w-7xl mx-auto">
+        {/* Hero Section */}
+        <header className="mb-24">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 1, ease: "easeOut" }}
+          >
+            <div className="flex items-center gap-3 mb-6 opacity-40">
+              <div className="h-[1px] w-12 bg-current" />
+              <span className="text-[10px] font-bold uppercase tracking-[0.3em]">System Online / Data Loading</span>
+            </div>
+            <h2 className="text-5xl md:text-8xl font-serif font-light leading-[0.9] mb-8 tracking-tighter">
+              不作為可視化<br />
+              <span className="italic opacity-30">アーカイブ</span>
             </h2>
-            <p className="text-lg leading-relaxed opacity-70 max-w-2xl">
-              このページは、特定のフォルダ名を正確に取得するためのガイドです。
-              以下のボタンをクリックして、フォルダ名をクリップボードにコピーしてください。
+            <p className="text-lg md:text-xl text-white/50 max-w-2xl font-light leading-relaxed">
+              なされなかった行動、語られなかった言葉、選ばれなかった未来。<br />
+              それら「不在」の集積を記録し、その質量を可視化する試み。
             </p>
-          </section>
+          </motion.div>
+        </header>
 
-          {/* Copy Section */}
-          <section className="bg-white rounded-[32px] p-8 md:p-12 shadow-sm border border-black/5 mb-12">
-            <div className="flex flex-col gap-6">
-              <div className="flex items-center gap-3 text-[#5A5A40]">
-                <Info size={18} />
-                <span className="text-xs font-bold uppercase tracking-wider">Target Folder Name</span>
+        {activeTab === 'archive' ? (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+            {/* Archive List */}
+            <div className="lg:col-span-8 space-y-4">
+              <div className="flex items-center justify-between mb-8 opacity-40">
+                <span className="text-[10px] font-bold uppercase tracking-widest">Recent Records</span>
+                <div className="flex gap-4">
+                  <Filter size={14} />
+                  <Database size={14} />
+                </div>
               </div>
               
-              <div className="relative group">
-                <div className="w-full bg-[#f5f5f0] rounded-2xl p-6 md:p-8 text-2xl md:text-4xl font-serif text-center border border-transparent group-hover:border-[#5A5A40]/20 transition-all duration-500">
-                  {folderName}
-                </div>
-                
-                <button
-                  onClick={handleCopy}
-                  className="mt-8 w-full bg-[#5A5A40] hover:bg-[#4a4a35] text-white rounded-full py-4 px-8 flex items-center justify-center gap-3 transition-all duration-300 transform active:scale-[0.98] shadow-lg shadow-[#5A5A40]/20"
+              {MOCK_DATA.map((item, index) => (
+                <motion.div
+                  key={item.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  onClick={() => setSelectedItem(item)}
+                  className={`group relative p-8 rounded-2xl border transition-all cursor-pointer ${
+                    selectedItem?.id === item.id 
+                    ? 'bg-white/5 border-[#FF4E00]/50' 
+                    : 'bg-white/[0.02] border-white/5 hover:border-white/20'
+                  }`}
                 >
-                  <AnimatePresence mode="wait">
-                    {copied ? (
-                      <motion.div
-                        key="check"
-                        initial={{ scale: 0.5, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0.5, opacity: 0 }}
-                        className="flex items-center gap-2"
-                      >
-                        <Check size={20} />
-                        <span className="font-medium">コピーしました</span>
-                      </motion.div>
-                    ) : (
-                      <motion.div
-                        key="copy"
-                        initial={{ scale: 0.5, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0.5, opacity: 0 }}
-                        className="flex items-center gap-2"
-                      >
-                        <Copy size={20} />
-                        <span className="font-medium">フォルダ名をコピー</span>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </button>
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <span className="text-[10px] font-mono text-[#FF4E00] mb-2 block">{item.id}</span>
+                      <h3 className="text-2xl font-serif">{item.title}</h3>
+                    </div>
+                    <span className="text-[10px] font-mono opacity-40">{item.date}</span>
+                  </div>
+                  <p className="text-sm text-white/40 line-clamp-2 mb-6 font-light">{item.description}</p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] px-2 py-1 rounded bg-white/5 border border-white/10 opacity-60 uppercase tracking-widest">
+                      {item.category}
+                    </span>
+                    <ChevronRight size={16} className="opacity-0 group-hover:opacity-100 transition-opacity transform group-hover:translate-x-1" />
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+
+            {/* Sidebar / Detail */}
+            <div className="lg:col-span-4">
+              <div className="sticky top-32 space-y-8">
+                {/* Selected Item Detail */}
+                <AnimatePresence mode="wait">
+                  {selectedItem && (
+                    <motion.div
+                      key={selectedItem.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      className="p-8 rounded-3xl bg-white/[0.02] border border-white/5"
+                    >
+                      <h4 className="text-xs font-bold uppercase tracking-widest text-[#FF4E00] mb-4">Details</h4>
+                      <p className="text-sm leading-relaxed text-white/70 mb-6 italic">
+                        "{selectedItem.description}"
+                      </p>
+                      <div className="space-y-4">
+                        <div className="flex justify-between text-[10px] uppercase tracking-widest opacity-40">
+                          <span>Intensity</span>
+                          <span>{selectedItem.intensity * 100}%</span>
+                        </div>
+                        <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${selectedItem.intensity * 100}%` }}
+                            className="h-full bg-[#FF4E00]" 
+                          />
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
-          </section>
-
-          {/* Instructions */}
-          <section className="grid md:grid-cols-2 gap-8 mb-24">
-            <div className="space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-widest opacity-40">Usage / 使い方</h3>
-              <ul className="space-y-3 text-sm leading-relaxed opacity-70">
-                <li className="flex gap-3">
-                  <span className="font-serif italic opacity-40">01.</span>
-                  <span>上のボタンを押して名前をコピーします。</span>
-                </li>
-                <li className="flex gap-3">
-                  <span className="font-serif italic opacity-40">02.</span>
-                  <span>作成したい場所で「新しいフォルダ」を作成します。</span>
-                </li>
-                <li className="flex gap-3">
-                  <span className="font-serif italic opacity-40">03.</span>
-                  <span>名前を貼り付けて（Ctrl+V / Cmd+V）保存します。</span>
-                </li>
-              </ul>
+          </div>
+        ) : (
+          <div className="h-[60vh] flex flex-col items-center justify-center border border-white/5 rounded-[40px] bg-white/[0.01] relative overflow-hidden">
+            <div className="absolute inset-0 flex items-center justify-center opacity-20">
+              <div className="w-[400px] h-[400px] border border-dashed border-[#FF4E00] rounded-full animate-[spin_20s_linear_infinite]" />
+              <div className="absolute w-[300px] h-[300px] border border-dashed border-white/20 rounded-full animate-[spin_15s_linear_infinite_reverse]" />
             </div>
-            
-            <div className="space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-widest opacity-40">Notes / 注意事項</h3>
-              <p className="text-sm leading-relaxed opacity-70">
-                文字化けや誤字を防ぐため、手入力ではなく必ずコピー機能を使用してください。
-                Vercelでの表示に問題がある場合は、ブラウザのキャッシュをクリアして再読み込みをお試しください。
-              </p>
+            <Database size={48} className="text-[#FF4E00] mb-6 animate-pulse" />
+            <h3 className="text-2xl font-serif mb-2">Visualization Engine</h3>
+            <p className="text-sm text-white/40 tracking-widest uppercase">Processing Inaction Data...</p>
+            <div className="mt-12 grid grid-cols-10 gap-2">
+              {Array.from({ length: 30 }).map((_, i) => (
+                <motion.div
+                  key={i}
+                  animate={{ 
+                    height: [10, Math.random() * 40 + 10, 10],
+                    opacity: [0.2, 0.6, 0.2]
+                  }}
+                  transition={{ 
+                    duration: 2 + Math.random() * 2, 
+                    repeat: Infinity,
+                    delay: i * 0.1
+                  }}
+                  className="w-1 bg-[#FF4E00] rounded-full"
+                />
+              ))}
             </div>
-          </section>
-        </motion.div>
+          </div>
+        )}
       </main>
 
-      <footer className="border-t border-black/5 py-12 px-4 md:px-8 opacity-40">
-        <div className="max-w-3xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6 text-[10px] tracking-widest uppercase font-bold">
-          <p>© 2026 不作為可視化アーカイブ</p>
-          <div className="flex gap-8">
-            <a href="#" className="hover:text-[#5A5A40] transition-colors flex items-center gap-1">
-              GitHub <ExternalLink size={10} />
-            </a>
-            <a href="#" className="hover:text-[#5A5A40] transition-colors">Privacy Policy</a>
+      <footer className="border-t border-white/5 py-12 px-6 opacity-30">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
+          <div className="flex items-center gap-4">
+            <Clock size={14} />
+            <span className="text-[10px] font-mono tracking-widest">SYSTEM TIME: {new Date().toISOString()}</span>
+          </div>
+          <div className="flex gap-12 text-[10px] font-bold uppercase tracking-[0.2em]">
+            <a href="#" className="hover:text-[#FF4E00] transition-colors">Documentation</a>
+            <a href="#" className="hover:text-[#FF4E00] transition-colors">API Access</a>
+            <a href="#" className="hover:text-[#FF4E00] transition-colors">Privacy</a>
           </div>
         </div>
       </footer>
