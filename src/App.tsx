@@ -18,6 +18,7 @@ interface ArchiveItem {
   category: string;
   description: string;
   intensity: number;
+  createdAt?: any;
 }
 
 interface Scandal {
@@ -554,14 +555,41 @@ function Visualization() {
 
 export default function App() {
   const [isMounted, setIsMounted] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<ArchiveItem | null>(MOCK_DATA[0]);
+  const [selectedItem, setSelectedItem] = useState<ArchiveItem | null>(null);
   const [activeTab, setActiveTab] = useState<'archive' | 'visualize' | 'scandal'>('archive');
   const [isNewEntryModalOpen, setIsNewEntryModalOpen] = useState(false);
-  const [archiveItems, setArchiveItems] = useState<ArchiveItem[]>(MOCK_DATA);
+  const [archiveItems, setArchiveItems] = useState<ArchiveItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     setIsMounted(true);
+    
+    // Real-time Archive items
+    const archiveCollection = collection(db, "archive");
+    const q = query(archiveCollection, orderBy("createdAt", "desc"));
+    
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ArchiveItem));
+      
+      // Seed if empty
+      if (data.length === 0) {
+        console.log("Seeding initial archive data...");
+        for (const item of MOCK_DATA) {
+          const { id, ...rest } = item;
+          await addDoc(archiveCollection, {
+            ...rest,
+            createdAt: Timestamp.now()
+          });
+        }
+      }
+      
+      setArchiveItems(data);
+      if (data.length > 0 && !selectedItem) {
+        setSelectedItem(data[0]);
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const filteredItems = useMemo(() => {
@@ -572,9 +600,16 @@ export default function App() {
     );
   }, [archiveItems, searchQuery]);
 
-  const handleAddEntry = (newItem: Omit<ArchiveItem, 'id'>) => {
-    const id = `ARC-${String(archiveItems.length + 1).padStart(3, '0')}`;
-    setArchiveItems([ { ...newItem, id }, ...archiveItems]);
+  const handleAddEntry = async (newItem: Omit<ArchiveItem, 'id'>) => {
+    try {
+      const archiveCollection = collection(db, "archive");
+      await addDoc(archiveCollection, {
+        ...newItem,
+        createdAt: Timestamp.now()
+      });
+    } catch (error) {
+      console.error("Error adding archive entry:", error);
+    }
   };
 
   if (!isMounted) return null;

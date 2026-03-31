@@ -25,21 +25,36 @@ service cloud.firestore {
 
     function isValidScandal(data) {
       return data.keys().hasAll(['title', 'date', 'category', 'description', 'sourceUrl', 'createdAt']) &&
-             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 500 &&
              data.date is string &&
              data.category in ['Administrative', 'Personal'] &&
-             data.description is string && data.description.size() < 2000 &&
+             data.description is string && data.description.size() < 5000 &&
              data.sourceUrl is string &&
              data.createdAt is timestamp;
     }
 
+    function isValidArchiveItem(data) {
+      return data.keys().hasAll(['title', 'date', 'category', 'description', 'intensity', 'createdAt']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.date is string &&
+             data.category is string &&
+             data.description is string && data.description.size() < 2000 &&
+             data.intensity is number && data.intensity >= 0 && data.intensity <= 1 &&
+             data.createdAt is timestamp;
+    }
+
     match /scandals/{scandalId} {
-      // Allow anyone to read the latest 10 scandals
       allow read: if true;
-      // Allow only the server (AI) to create/update.
-      // In this environment, we'll use a simple secret header or just allow for now for demo purposes.
-      // Ideally, this would be restricted to a service account.
-      allow create, update: if true; // For now, we'll handle security in the server-side route.
+      // In a real app, we'd restrict this to an admin or a specific service account.
+      // For this demo, we allow creation if it's a valid scandal.
+      allow create: if isValidScandal(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    match /archive/{archiveId} {
+      allow read: if true;
+      allow create: if isValidArchiveItem(request.resource.data);
+      allow update, delete: if false;
     }
   }
 }

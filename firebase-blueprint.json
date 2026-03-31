@@ -14,12 +14,30 @@
         "createdAt": { "type": "string", "format": "date-time", "description": "The time the record was added to the database." }
       },
       "required": ["title", "date", "category", "description", "sourceUrl", "createdAt"]
+    },
+    "archiveItem": {
+      "title": "Inaction Archive Item",
+      "description": "A record of inaction, unspoken words, or unselected futures.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The title of the inaction record." },
+        "date": { "type": "string", "description": "The date of the record." },
+        "category": { "type": "string", "description": "The category of inaction." },
+        "description": { "type": "string", "description": "A detailed description of the inaction." },
+        "intensity": { "type": "number", "description": "The intensity of the inaction (0-1)." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "The time the record was added to the database." }
+      },
+      "required": ["title", "date", "category", "description", "intensity", "createdAt"]
     }
   },
   "firestore": {
     "/scandals/{scandalId}": {
       "schema": "scandal",
       "description": "A collection of administrative and civil servant scandals collected from news sources."
+    },
+    "/archive/{archiveId}": {
+      "schema": "archiveItem",
+      "description": "A collection of user-submitted inaction records."
     }
   }
 }
