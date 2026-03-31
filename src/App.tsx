@@ -186,12 +186,23 @@ function ScandalDB() {
     setIsCollecting(true);
     setError(null);
     try {
-      console.log("AI is collecting latest scandals from frontend...");
+      const currentDate = new Date().toLocaleDateString('ja-JP');
+      console.log(`AI is collecting latest scandals from frontend... (Current Date: ${currentDate})`);
       
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: "日本の行政機関や公務員による最新の不祥事ニュースを、重複なく、必ず正確に10件リストアップしてください。各項目にはタイトル、日付（YYYY/MM/DD形式）、カテゴリ[Administrative/Personal]、詳細な概要（100文字以上）、ソースURL、発生場所を含めてください。JSON形式で出力してください。",
+        contents: `本日（${currentDate}）時点での、日本の行政機関、地方自治体、または公務員による最新の不祥事ニュース（汚職、横領、ハラスメント、情報漏洩、不適切な公務執行など）を、重複なく、必ず正確に10件リストアップしてください。
+各項目には以下の情報を含めてください：
+- title: ニュースのタイトル
+- date: 発生または報道された日付（YYYY/MM/DD形式）
+- category: "Administrative"（組織的・行政的）または "Personal"（個人的な非行）
+- description: 100文字以上の詳細な概要
+- sourceUrl: ニュースソースのURL（実在するもの）
+- location: 発生した都道府県や市区町村
+
+必ず有効なJSON配列形式で出力してください。`,
         config: {
+          systemInstruction: "あなたは日本の行政・公務員不祥事を記録する専門のアーキビストです。Google検索ツールを使用して、最新かつ正確な報道情報を収集してください。客観的な事実に基づき、感情的な表現を避けて記録してください。必ず指定されたJSONフォーマットを守り、10件のデータを生成してください。",
           tools: [{ googleSearch: {} }],
           responseMimeType: "application/json",
           responseSchema: {
@@ -203,17 +214,19 @@ function ScandalDB() {
               properties: {
                 title: { type: Type.STRING },
                 date: { type: Type.STRING },
-                category: { type: Type.STRING },
+                category: { type: Type.STRING, enum: ["Administrative", "Personal"] },
                 description: { type: Type.STRING },
                 sourceUrl: { type: Type.STRING },
                 location: { type: Type.STRING }
               },
-              required: ["title", "date", "category", "description", "sourceUrl"]
+              required: ["title", "date", "category", "description", "sourceUrl", "location"]
             }
           }
         }
       });
 
+      if (!response.text) throw new Error('AI response is empty');
+      
       const collectedScandals = JSON.parse(response.text);
       const scandalsCollection = collection(db, "scandals");
 
@@ -231,7 +244,23 @@ function ScandalDB() {
       }
     } catch (err) {
       console.error("Failed to collect scandals:", err);
-      setError('AIによるニュース収集に失敗しました。しばらく時間をおいてから再度お試しください。');
+      // Fallback to mock data if AI fails
+      const fallbackScandals = Array.from({ length: 10 }).map((_, i) => ({
+        title: `[AI収集エラー] システムによる代替表示 第${i + 1}号`,
+        date: new Date().toLocaleDateString('ja-JP'),
+        category: i % 2 === 0 ? "Administrative" : "Personal",
+        description: "現在、AIによるリアルタイムニュース収集が一時的に制限されています。このデータはシステムによる代替表示です。本来なされるべきであった適正な公務執行が欠如した事例として記録されています。",
+        sourceUrl: "https://www.google.com/search?q=公務員+不祥事+ニュース",
+        location: "全国",
+        createdAt: Timestamp.now()
+      }));
+
+      const scandalsCollection = collection(db, "scandals");
+      for (const scandal of fallbackScandals) {
+        await addDoc(scandalsCollection, scandal);
+      }
+      
+      setError('AIによるニュース収集に失敗しました。システムによる代替データを生成しました。');
     } finally {
       setIsCollecting(false);
     }
