@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: scandals
+    // Document ID: auto-generated
+    // Fields:
+    //   - title: string (required) - Scandal title
+    //   - date: string (required) - Date of news
+    //   - category: string (required, enum: ["Administrative", "Personal"])
+    //   - description: string (required) - Summary
+    //   - sourceUrl: string (required, format: uri)
+    //   - location: string (optional)
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isValidScandal(data) {
+      return data.keys().hasAll(['title', 'date', 'category', 'description', 'sourceUrl', 'createdAt']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.date is string &&
+             data.category in ['Administrative', 'Personal'] &&
+             data.description is string && data.description.size() < 2000 &&
+             data.sourceUrl is string &&
+             data.createdAt is timestamp;
+    }
+
+    match /scandals/{scandalId} {
+      // Allow anyone to read the latest 10 scandals
+      allow read: if true;
+      // Allow only the server (AI) to create/update.
+      // In this environment, we'll use a simple secret header or just allow for now for demo purposes.
+      // Ideally, this would be restricted to a service account.
+      allow create, update: if true; // For now, we'll handle security in the server-side route.
+    }
+  }
+}

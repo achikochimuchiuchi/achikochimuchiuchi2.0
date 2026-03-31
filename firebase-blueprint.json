@@ -1,0 +1,25 @@
+{
+  "entities": {
+    "scandal": {
+      "title": "Administrative/Civil Servant Scandal",
+      "description": "A record of a scandal involving administrative bodies or individual civil servants.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The title of the scandal news." },
+        "date": { "type": "string", "description": "The date the scandal was reported." },
+        "category": { "type": "string", "enum": ["Administrative", "Personal"], "description": "Whether the scandal is organizational or individual." },
+        "description": { "type": "string", "description": "A brief summary of the scandal." },
+        "sourceUrl": { "type": "string", "format": "uri", "description": "The URL of the news source." },
+        "location": { "type": "string", "description": "The prefecture or city where the scandal occurred." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "The time the record was added to the database." }
+      },
+      "required": ["title", "date", "category", "description", "sourceUrl", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/scandals/{scandalId}": {
+      "schema": "scandal",
+      "description": "A collection of administrative and civil servant scandals collected from news sources."
+    }
+  }
+}
