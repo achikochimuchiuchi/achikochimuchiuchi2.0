@@ -173,12 +173,17 @@ function ScandalDB() {
   const [isLoading, setIsLoading] = useState(false);
   const [isCollecting, setIsCollecting] = useState(false);
 
-  const fetchScandals = async () => {
+  const fetchScandals = async (autoCollect = false) => {
     setIsLoading(true);
     try {
       const res = await fetch('/api/scandals');
       const data = await res.json();
       setScandals(data);
+      
+      // If fewer than 10 and autoCollect is true, trigger collection to top up
+      if (data.length < 10 && autoCollect) {
+        await collectScandals();
+      }
     } catch (err) {
       console.error("Failed to fetch scandals:", err);
     } finally {
@@ -190,7 +195,7 @@ function ScandalDB() {
     setIsCollecting(true);
     try {
       await fetch('/api/collect-scandals', { method: 'POST' });
-      await fetchScandals();
+      await fetchScandals(false);
     } catch (err) {
       console.error("Failed to collect scandals:", err);
     } finally {
@@ -199,7 +204,7 @@ function ScandalDB() {
   };
 
   useEffect(() => {
-    fetchScandals();
+    fetchScandals(true);
   }, []);
 
   return (
@@ -224,13 +229,28 @@ function ScandalDB() {
       </div>
 
       <div className="grid grid-cols-1 gap-6">
-        {isLoading ? (
-          <div className="py-24 text-center border border-dashed border-white/10 rounded-[32px] opacity-40">
-            <div className="w-8 h-8 border-2 border-[#FF4E00] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-sm uppercase tracking-widest font-bold">Loading Database...</p>
-          </div>
+        {(isLoading || (isCollecting && scandals.length === 0)) ? (
+          // Skeleton Loaders
+          Array.from({ length: 10 }).map((_, i) => (
+            <div key={`skeleton-${i}`} className="p-8 rounded-[32px] bg-white/[0.02] border border-white/5 animate-pulse">
+              <div className="flex gap-4 mb-6">
+                <div className="w-16 h-4 bg-white/5 rounded-full" />
+                <div className="w-24 h-4 bg-white/5 rounded-full" />
+              </div>
+              <div className="w-3/4 h-8 bg-white/5 rounded-xl mb-4" />
+              <div className="w-full h-4 bg-white/5 rounded-lg mb-2" />
+              <div className="w-2/3 h-4 bg-white/5 rounded-lg" />
+            </div>
+          ))
         ) : scandals.length > 0 ? (
-          scandals.map((scandal, index) => (
+          <>
+            {isCollecting && (
+              <div className="flex items-center gap-3 px-8 py-4 bg-[#FF4E00]/10 border border-[#FF4E00]/20 rounded-2xl mb-6 animate-pulse">
+                <Activity size={14} className="text-[#FF4E00] animate-spin" />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[#FF4E00]">最新データを収集中... しばらくお待ちください</span>
+              </div>
+            )}
+            {scandals.map((scandal, index) => (
             <motion.div
               key={scandal.id}
               initial={{ opacity: 0, y: 20 }}
@@ -267,7 +287,8 @@ function ScandalDB() {
                 <Clock size={10} /> Collected at: {new Date(scandal.createdAt?.seconds * 1000).toLocaleString()}
               </div>
             </motion.div>
-          ))
+          ))}
+          </>
         ) : (
           <div className="py-24 text-center border border-dashed border-white/10 rounded-[32px] opacity-40">
             <Database size={32} className="mx-auto mb-4" />

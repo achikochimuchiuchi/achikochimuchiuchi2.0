@@ -35,12 +35,14 @@ async function startServer() {
       
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: "日本の行政機関や公務員による最新の不祥事ニュースを10件、詳細（タイトル、日付、カテゴリ[Administrative/Personal]、概要、ソースURL、場所）とともにJSON形式でリストアップしてください。最新のものから順にお願いします。",
+        contents: "日本の行政機関や公務員による最新の不祥事ニュースを、重複なく、必ず正確に10件リストアップしてください。各項目にはタイトル、日付（YYYY/MM/DD形式）、カテゴリ[Administrative/Personal]、詳細な概要（100文字以上）、ソースURL、発生場所を含めてください。JSON形式で出力してください。",
         config: {
           tools: [{ googleSearch: {} }],
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.ARRAY,
+            minItems: 10,
+            maxItems: 10,
             items: {
               type: Type.OBJECT,
               properties: {
@@ -61,9 +63,8 @@ async function startServer() {
       const scandalsCollection = collection(db, "scandals");
 
       // Store in Firestore
-      const addedCount = 0;
       for (const scandal of scandals) {
-        // Check if already exists by title (simple deduplication)
+        // Check if already exists by title
         const q = query(scandalsCollection, where("title", "==", scandal.title));
         const existing = await getDocs(q);
         
