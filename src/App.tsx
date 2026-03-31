@@ -174,6 +174,7 @@ function NewEntryModal({ isOpen, onClose, onSubmit }: { isOpen: boolean, onClose
 }
 
 function ScandalDB() {
+  console.log("ScandalDB component rendered");
   const [scandals, setScandals] = useState<Scandal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCollecting, setIsCollecting] = useState(false);
@@ -554,9 +555,10 @@ function Visualization() {
 // --- Main App ---
 
 export default function App() {
+  console.log("App component rendered");
   const [isMounted, setIsMounted] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ArchiveItem | null>(null);
-  const [activeTab, setActiveTab] = useState<'archive' | 'visualize' | 'scandal'>('archive');
+  const [activeTab, setActiveTab] = useState<'archive' | 'visualize' | 'scandal'>('scandal');
   const [isNewEntryModalOpen, setIsNewEntryModalOpen] = useState(false);
   const [archiveItems, setArchiveItems] = useState<ArchiveItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -942,12 +944,15 @@ export default function App() {
                   <Layers size={20} className="text-white" />
                 </div>
                 <h1 className="text-xl font-serif tracking-[0.2em] font-light uppercase">
-                  Inaction <span className="text-[#FF4E00]">Archive</span>
+                  Inaction <span className="text-[#FF4E00]">Archive</span> <span className="text-[10px] bg-[#FF4E00] text-white px-2 py-1 rounded ml-2">v2.1</span>
                 </h1>
               </div>
               <p className="text-white/40 max-w-md font-light leading-relaxed mb-8">
                 The Inaction Visualization Archive is a research project dedicated to mapping the unseen landscape of human non-action. By quantifying what didn't happen, we reveal the true shape of our choices.
               </p>
+              <div className="text-[8px] font-mono opacity-20 uppercase tracking-widest mb-8">
+                System Version: 2.1.0-STABLE / Build: 20260331
+              </div>
               <div className="flex gap-6 opacity-40">
                 <Share2 size={20} className="hover:text-[#FF4E00] cursor-pointer transition-colors" />
                 <Database size={20} className="hover:text-[#FF4E00] cursor-pointer transition-colors" />
